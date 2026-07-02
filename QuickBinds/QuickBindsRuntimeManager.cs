@@ -39,6 +39,14 @@ public sealed class QuickBindsRuntimeManager : MonoBehaviour
         if (MpMenuUiAutomation.HasPending)
             MpMenuUiAutomation.Tick();
 
+        if (ModSettings.EnableQuickBinds
+            && !VrQuickBindInput.IsSettingsRecordingCaptureActive
+            && Input.GetKeyDown(KeyCode.K))
+        {
+            QuickBindMpActions.TryQuickDisconnect();
+            return;
+        }
+
         if (!ModSettings.EnableQuickBinds)
             return;
 

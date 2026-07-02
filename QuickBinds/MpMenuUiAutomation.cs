@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using MultiplayerChat.Core;
 using MultiplayerChat.Core.Addons;
 using TMPro;
 using UnityEngine;
@@ -32,10 +33,13 @@ internal static class MpMenuUiAutomation
     private static Type? _resultsVcType;
     private static Type? _missionResultsVcType;
     private static Type? _mpResultsVcType;
+    private static Type? _activeInGameMenuVcType;
+    private static Type? _inactiveInGameMenuVcType;
+    private static Type? _inGameMenuControllerType;
 
     private static int _disconnectFlowId;
 
-    private const int MaxDisconnectPollAttempts = 24;
+    private const int MaxDisconnectPollAttempts = 40;
     private const float DisconnectPollIntervalSeconds = 0.2f;
     private const string JoiningLobbyCancelClickHandler = "<DidActivate>b__8_0";
 
@@ -52,6 +56,14 @@ internal static class MpMenuUiAutomation
         "close",
         "ok",
         "dismiss"
+    };
+
+    private static readonly string[] LeaveConfirmLabelNeedles =
+    {
+        "yes",
+        "leave",
+        "disconnect",
+        "confirm"
     };
 
     internal static bool HasPending => Pending.Count > 0;
@@ -84,8 +96,8 @@ internal static class MpMenuUiAutomation
         Pending.Clear();
         _disconnectFlowId++;
         var flowId = _disconnectFlowId;
-        Schedule(0f, "DisconnectPoll#0", () => RunDisconnectPollStep(flowId, 0));
         MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Quick Disconnect flow scheduled.");
+        RunDisconnectPollStep(flowId, 0);
     }
 
     private static void Schedule(float delaySeconds, string name, Action action)
@@ -117,29 +129,28 @@ internal static class MpMenuUiAutomation
 
         if (IsDisconnectComplete())
         {
-            AddonCustomAvatarsBridge.FlushLobbyCustomAvatarsOnServerLeave();
-            MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Quick Disconnect complete.");
+            FinishDisconnectFlow();
             return;
         }
 
         RunStep(() => TryClearBlockingDialogs(includeDisconnectPrompt: false));
         RunStep(TryPressContinueIfOnResults);
 
-        if (MpLobbySessionExit.IsSessionConnected() || MpLobbySessionExit.IsInCustomServerLobby())
-        {
-            if (IsDisconnectPromptVisible())
-                RunStep(TryPressDisconnectPromptOk);
-            else
-                RunStep(TryLeaveSessionForMenuFlow);
-        }
+        if (IsDisconnectPromptVisible())
+            RunStep(TryPressDisconnectPromptOk);
+        else if (IsInArenaContext())
+            RunStep(TryTriggerInArenaDisconnect);
+        else if (MpLobbySessionExit.IsSessionConnected() || MpLobbySessionExit.IsInCustomServerLobby())
+            RunStep(TryTriggerLobbyDisconnect);
 
         if (IsDisconnectPromptVisible())
             RunStep(TryPressDisconnectPromptOk);
 
+        RunStep(TryConfirmLeaveLobbyDialog);
+
         if (IsDisconnectComplete())
         {
-            AddonCustomAvatarsBridge.FlushLobbyCustomAvatarsOnServerLeave();
-            MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Quick Disconnect complete.");
+            FinishDisconnectFlow();
             return;
         }
 
@@ -155,7 +166,97 @@ internal static class MpMenuUiAutomation
             () => RunDisconnectPollStep(flowId, attempt + 1));
     }
 
+    private static void FinishDisconnectFlow()
+    {
+        AddonCustomAvatarsBridge.FlushLobbyCustomAvatarsOnServerLeave();
+        MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Quick Disconnect complete.");
+    }
+
     private static bool IsDisconnectComplete() => !MpLobbySessionExit.IsSessionConnected();
+
+    private static bool IsInArenaContext() =>
+        MpChatLobbyDiagnostics.SongGameplayLikelyActive()
+        || MpChatLobbyDiagnostics.IsSpectatingInActiveMultiplayerSong();
+
+    private static bool TryTriggerInArenaDisconnect()
+    {
+        if (!IsInArenaContext())
+            return false;
+
+        var types = MpChatLobbyDiagnostics.IsSpectatingInActiveMultiplayerSong()
+            ? new[] { InactiveInGameMenuVcType, ActiveInGameMenuVcType }
+            : new[] { ActiveInGameMenuVcType, InactiveInGameMenuVcType };
+
+        foreach (var type in types)
+        {
+            if (type == null)
+                continue;
+
+            foreach (var vc in MpUiReflection.FindAllInLoadedScenes(type, requireHierarchy: true))
+            {
+                if (MpUiReflection.TryInvokeParameterless(vc, "DisconnectButtonPressed"))
+                {
+                    MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Triggered in-arena DisconnectButtonPressed.");
+                    return true;
+                }
+
+                if (TryPressFieldButton(vc, type, "_disconnectButton"))
+                {
+                    MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Pressed in-arena disconnect button.");
+                    return true;
+                }
+            }
+        }
+
+        var controller = MpUiReflection.FindBestActiveObject(InGameMenuControllerType);
+        if (controller != null
+            && MpUiReflection.TryInvokeParameterless(controller, "HandleInGameMenuViewControllerDidPressDisconnectButton"))
+        {
+            MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Triggered in-arena menu controller disconnect handler.");
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryTriggerLobbyDisconnect()
+    {
+        var lobbyFc = MpUiReflection.GetBestFlowCoordinator(LobbyFcType, "_lobbySetupViewController");
+        if (lobbyFc != null)
+        {
+            var userInitiated = ResolveEnumValue("DisconnectedReason", "UserInitiated");
+            if (userInitiated != null
+                && MpUiReflection.TryInvoke(lobbyFc, "ShowDisconnectDialogAndFinish", userInitiated))
+            {
+                MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Triggered lobby ShowDisconnectDialogAndFinish.");
+                return true;
+            }
+        }
+
+        if (MpLobbySessionExit.TryLeaveLobbyImmediately())
+        {
+            MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Triggered lobby leave fallback.");
+            return true;
+        }
+
+        return false;
+    }
+
+    private static object? ResolveEnumValue(string typeName, string valueName)
+    {
+        var type = MpUiReflection.ResolveType(typeName);
+        if (type == null || !type.IsEnum)
+            return null;
+
+        try
+        {
+            return Enum.Parse(type, valueName);
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private static bool TryClearBlockingDialogs(bool includeDisconnectPrompt = true)
     {
@@ -270,6 +371,47 @@ internal static class MpMenuUiAutomation
             try
             {
                 finishAction.Invoke(dismissIndex);
+                return true;
+            }
+            catch
+            {
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryConfirmLeaveLobbyDialog()
+    {
+        if (!GetVisibleSimpleDialog(out var viewController, out var viewControllerType))
+            return false;
+
+        if (viewController == null || viewControllerType == null)
+            return false;
+
+        if (IsDisclaimerDialog(viewController, viewControllerType))
+            return false;
+
+        var buttonsField = viewControllerType.GetField("_buttons", BindingFlags.Instance | BindingFlags.NonPublic);
+        var textsField = viewControllerType.GetField("_buttonTexts", BindingFlags.Instance | BindingFlags.NonPublic);
+        var finishField = viewControllerType.GetField("_didFinishAction", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        if (buttonsField?.GetValue(viewController) is not Button[] buttons || buttons.Length == 0)
+            return false;
+
+        var texts = textsField?.GetValue(viewController) as TextMeshProUGUI[];
+        var confirmIndex = FindLabelButtonIndexOrNegative(buttons, texts, LeaveConfirmLabelNeedles);
+        if (confirmIndex < 0)
+            return false;
+
+        if (TryPressButton(buttons[confirmIndex]))
+            return true;
+
+        if (finishField?.GetValue(viewController) is Action<int> finishAction)
+        {
+            try
+            {
+                finishAction.Invoke(confirmIndex);
                 return true;
             }
             catch
@@ -602,4 +744,13 @@ internal static class MpMenuUiAutomation
 
     private static Type? MpResultsVcType =>
         _mpResultsVcType ??= MpUiReflection.ResolveType("MultiplayerResultsViewController");
+
+    private static Type? ActiveInGameMenuVcType =>
+        _activeInGameMenuVcType ??= MpUiReflection.ResolveType("MultiplayerLocalActivePlayerInGameMenuViewController");
+
+    private static Type? InactiveInGameMenuVcType =>
+        _inactiveInGameMenuVcType ??= MpUiReflection.ResolveType("MultiplayerLocalInactivePlayerInGameMenuViewController");
+
+    private static Type? InGameMenuControllerType =>
+        _inGameMenuControllerType ??= MpUiReflection.ResolveType("MultiplayerLocalActivePlayerInGameMenuController");
 }

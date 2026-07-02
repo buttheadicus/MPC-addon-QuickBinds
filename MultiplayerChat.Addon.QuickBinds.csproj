@@ -47,11 +47,6 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="QuickBindsAddon.cs" />
-    <Compile Include="QuickBinds\**\*.cs" />
-    <Compile Include="UI\**\*.cs" />
-  </ItemGroup>
-  <ItemGroup>
     <EmbeddedResource Include="UI\QuickBindsSettingsView.bsml">
       <LogicalName>MultiplayerChat.UI.QuickBindsSettingsView.bsml</LogicalName>
     </EmbeddedResource>
