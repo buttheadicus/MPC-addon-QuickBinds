@@ -1,0 +1,9 @@
+{
+  "id": "quickBinds",
+  "displayName": "Quick Binds",
+  "minCoreVersion": "0.3.0",
+  "enabledByDefault": true,
+  "dependencies": [],
+  "capability": 1,
+  "settingsModSettingsKey": "enableQuickBinds"
+}

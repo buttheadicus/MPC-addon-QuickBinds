@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="BeatSaber.Mod.props" />
+  <PropertyGroup>
+    <AssemblyName>MultiplayerChat.Addon.QuickBinds</AssemblyName>
+    <RootNamespace>MultiplayerChat.Addon.QuickBinds</RootNamespace>
+    <Version>1.0.0</Version>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
+    <AddonManifestFile>quickBinds.addon.json</AddonManifestFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="MultiplayerChat.Contracts">
+      <HintPath>$(ContractsDllPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="MultiplayerChat">
+      <HintPath>$(CoreDllPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BeatSaberDir)\Libs\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.InputLegacyModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.XRModule">
+      <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\UnityEngine.XRModule.dll</HintPath>
+    </Reference>
+    <Reference Include="HMUI">
+      <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\HMUI.dll</HintPath>
+    </Reference>
+    <Reference Include="BSML">
+      <HintPath>$(BeatSaberDir)\Plugins\BSML.dll</HintPath>
+    </Reference>
+    <Reference Include="Zenject">
+      <HintPath>$(BeatSaberDir)\Beat Saber_Data\Managed\Zenject.dll</HintPath>
+    </Reference>
+    <Reference Include="MultiplayerCore">
+      <HintPath>$(BeatSaberDir)\Plugins\MultiplayerCore.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="QuickBindsAddon.cs" />
+    <Compile Include="QuickBinds\**\*.cs" />
+    <Compile Include="UI\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="UI\QuickBindsSettingsView.bsml">
+      <LogicalName>MultiplayerChat.UI.QuickBindsSettingsView.bsml</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="UI\QuickBindsOptionsSettingsView.bsml">
+      <LogicalName>MultiplayerChat.UI.QuickBindsOptionsSettingsView.bsml</LogicalName>
+    </EmbeddedResource>
+    <None Include="quickBinds.addon.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+</Project>

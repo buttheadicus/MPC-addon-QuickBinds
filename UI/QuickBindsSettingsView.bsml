@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bg xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="https://monkeymanboy.github.io/BSML-Docs/BSMLSchema.xsd">
+  <vertical id="QuickBindsRoot" pad="8" spacing="4" child-align="MiddleCenter" horizontal-fit="PreferredSize">
+    <vertical id="EnableToggleGroup" spacing="2" child-align="MiddleCenter" horizontal-fit="PreferredSize">
+      <toggle-setting id="QuickBindsEnableToggle" text="Enable Quick Binds" value="QuickBindsEnabled" horizontal-fit="PreferredSize"/>
+    </vertical>
+    <horizontal id="ApplyRow" spacing="3" child-align="MiddleCenter" horizontal-fit="PreferredSize">
+      <button id="SettingsButton" text="Settings" pad="2" on-click="SettingsClicked"/>
+      <button id="ApplyButton" text="Apply" pad="2" on-click="ApplyClicked"/>
+    </horizontal>
+    <vertical id="ControlsSection" spacing="2" child-align="MiddleCenter" horizontal-fit="PreferredSize">
+      <button id="RecordButton" text="RECORD" pad="2" on-click="RecordClicked"/>
+      <text id="RecordingStatusText" text="Select an action below to configure a binding." font-size="3.5" align="Center" enable-word-wrapping="true"/>
+      <text id="ComboPreviewText" text="Current button combo: (none)" font-size="4" align="Center" enable-word-wrapping="true"/>
+      <horizontal id="QuickBindsActionRow1" spacing="3" child-align="MiddleCenter" horizontal-fit="PreferredSize">
+        <button text="Quick Disconnect" pad="2" on-click="ConfigureQuickDisconnectClicked"/>
+        <button text="Quick Ready Up" pad="2" on-click="ConfigureQuickReadyUpClicked"/>
+      </horizontal>
+      <horizontal id="QuickBindsActionRow2" spacing="3" child-align="MiddleCenter" horizontal-fit="PreferredSize">
+        <button id="DeleteBindingButton" text="Delete Binding" pad="2" on-click="DeleteBindingClicked"/>
+      </horizontal>
+    </vertical>
+    <text id="QuickBindsHelpText" text="Tap RECORD, then press the buttons on your controller you want bound to this quick action. You can chain as many presses as you want. After you press your buttons, wait 3 seconds with no presses and the binding saves." font-size="3.2" align="Center" enable-word-wrapping="true"/>
+  </vertical>
+</bg>

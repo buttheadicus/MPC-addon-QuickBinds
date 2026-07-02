@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<bg xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="https://monkeymanboy.github.io/BSML-Docs/BSMLSchema.xsd">
+  <vertical pad="10" spacing="6">
+    <slider-setting id="ComboExpireSeconds" text="Time until combo expires" value="ComboExpireSeconds" min="1" max="60" increment="1" show-value="true"/>
+    <toggle-setting id="AllowDuringSongToggle" text="Allow combo while playing song" value="AllowQuickBindsDuringSong"/>
+    <horizontal id="ApplyRow" spacing="3" child-align="MiddleCenter" horizontal-fit="PreferredSize">
+      <button id="ApplyButton" text="Apply" pad="2" on-click="ApplyClicked"/>
+    </horizontal>
+  </vertical>
+</bg>
