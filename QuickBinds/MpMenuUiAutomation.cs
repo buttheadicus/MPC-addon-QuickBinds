@@ -38,6 +38,8 @@ internal static class MpMenuUiAutomation
     private static Type? _inGameMenuControllerType;
 
     private static int _disconnectFlowId;
+    private static bool _arenaDisconnectTriggered;
+    private static bool _lobbyDisconnectTriggered;
 
     private const int MaxDisconnectPollAttempts = 40;
     private const float DisconnectPollIntervalSeconds = 0.2f;
@@ -95,6 +97,8 @@ internal static class MpMenuUiAutomation
     {
         Pending.Clear();
         _disconnectFlowId++;
+        _arenaDisconnectTriggered = false;
+        _lobbyDisconnectTriggered = false;
         var flowId = _disconnectFlowId;
         MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Quick Disconnect flow scheduled.");
         RunDisconnectPollStep(flowId, 0);
@@ -138,9 +142,10 @@ internal static class MpMenuUiAutomation
 
         if (IsDisconnectPromptVisible())
             RunStep(TryPressDisconnectPromptOk);
-        else if (IsInArenaContext())
+        else if (IsInArenaContext() && !_arenaDisconnectTriggered)
             RunStep(TryTriggerInArenaDisconnect);
-        else if (MpLobbySessionExit.IsSessionConnected() || MpLobbySessionExit.IsInCustomServerLobby())
+        else if ((MpLobbySessionExit.IsSessionConnected() || MpLobbySessionExit.IsInCustomServerLobby())
+                 && !_lobbyDisconnectTriggered)
             RunStep(TryTriggerLobbyDisconnect);
 
         if (IsDisconnectPromptVisible())
@@ -180,8 +185,47 @@ internal static class MpMenuUiAutomation
 
     private static bool TryTriggerInArenaDisconnect()
     {
-        if (!IsInArenaContext())
+        if (!IsInArenaContext() || _arenaDisconnectTriggered)
             return false;
+
+        if (!TryFindBestInGameMenuView(out var menuView, out var menuViewType))
+            return false;
+
+        _arenaDisconnectTriggered = true;
+
+        var controller = MpUiReflection.FindBestActiveObject(InGameMenuControllerType);
+        if (controller != null)
+            MpUiReflection.TryInvokeParameterless(controller, "ShowInGameMenu");
+        else
+            MpUiReflection.TryInvokeParameterless(menuView, "ShowMenu");
+
+        if (MpUiReflection.TryInvokeParameterless(menuView, "DisconnectButtonPressed"))
+        {
+            MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Triggered in-arena DisconnectButtonPressed (once).");
+            return true;
+        }
+
+        if (TryPressFieldButton(menuView, menuViewType, "_disconnectButton"))
+        {
+            MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Pressed in-arena disconnect button (once).");
+            return true;
+        }
+
+        if (controller != null
+            && MpUiReflection.TryInvokeParameterless(controller, "HandleInGameMenuViewControllerDidPressDisconnectButton"))
+        {
+            MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Triggered in-arena menu controller disconnect handler (once).");
+            return true;
+        }
+
+        _arenaDisconnectTriggered = false;
+        return false;
+    }
+
+    private static bool TryFindBestInGameMenuView(out object? menuView, out Type? menuViewType)
+    {
+        menuView = null;
+        menuViewType = null;
 
         var types = MpChatLobbyDiagnostics.IsSpectatingInActiveMultiplayerSong()
             ? new[] { InactiveInGameMenuVcType, ActiveInGameMenuVcType }
@@ -194,26 +238,10 @@ internal static class MpMenuUiAutomation
 
             foreach (var vc in MpUiReflection.FindAllInLoadedScenes(type, requireHierarchy: true))
             {
-                if (MpUiReflection.TryInvokeParameterless(vc, "DisconnectButtonPressed"))
-                {
-                    MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Triggered in-arena DisconnectButtonPressed.");
-                    return true;
-                }
-
-                if (TryPressFieldButton(vc, type, "_disconnectButton"))
-                {
-                    MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Pressed in-arena disconnect button.");
-                    return true;
-                }
+                menuView = vc;
+                menuViewType = type;
+                return true;
             }
-        }
-
-        var controller = MpUiReflection.FindBestActiveObject(InGameMenuControllerType);
-        if (controller != null
-            && MpUiReflection.TryInvokeParameterless(controller, "HandleInGameMenuViewControllerDidPressDisconnectButton"))
-        {
-            MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Triggered in-arena menu controller disconnect handler.");
-            return true;
         }
 
         return false;
@@ -221,6 +249,11 @@ internal static class MpMenuUiAutomation
 
     private static bool TryTriggerLobbyDisconnect()
     {
+        if (_lobbyDisconnectTriggered)
+            return false;
+
+        _lobbyDisconnectTriggered = true;
+
         var lobbyFc = MpUiReflection.GetBestFlowCoordinator(LobbyFcType, "_lobbySetupViewController");
         if (lobbyFc != null)
         {
@@ -500,15 +533,35 @@ internal static class MpMenuUiAutomation
 
     private static bool IsDisconnectPromptVisible()
     {
-        var view = MpUiReflection.FindBestActiveObject(DisconnectPromptType);
-        if (view == null)
-            return false;
+        if (IsDisconnectPromptInstanceVisible(MpUiReflection.FindBestActiveObject(DisconnectPromptType)))
+            return true;
 
-        var promptField = DisconnectPromptType!.GetField("_promptGameObject", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (promptField?.GetValue(view) is GameObject prompt && prompt != null)
-            return prompt.activeInHierarchy;
+        foreach (var type in new[] { ActiveInGameMenuVcType, InactiveInGameMenuVcType })
+        {
+            if (type == null)
+                continue;
+
+            foreach (var vc in MpUiReflection.FindAllInLoadedScenes(type, requireHierarchy: true))
+            {
+                var prompt = MpUiReflection.GetInstanceField(vc, "_disconnectPromptView");
+                if (IsDisconnectPromptInstanceVisible(prompt))
+                    return true;
+            }
+        }
 
         return false;
+    }
+
+    private static bool IsDisconnectPromptInstanceVisible(object? promptView)
+    {
+        if (promptView == null || DisconnectPromptType == null)
+            return false;
+
+        var promptField = DisconnectPromptType.GetField("_promptGameObject", BindingFlags.Instance | BindingFlags.NonPublic);
+        if (promptField?.GetValue(promptView) is GameObject prompt && prompt != null)
+            return prompt.activeInHierarchy;
+
+        return promptView is Component component && component.gameObject.activeInHierarchy;
     }
 
     private static bool TryInvokeContinueHandlers()
@@ -572,17 +625,43 @@ internal static class MpMenuUiAutomation
 
     private static bool TryPressDisconnectPromptOk()
     {
-        var view = MpUiReflection.FindBestActiveObject(DisconnectPromptType);
-        if (view == null)
+        if (TryPressDisconnectPromptInstanceOk(MpUiReflection.FindBestActiveObject(DisconnectPromptType)))
+            return true;
+
+        foreach (var type in new[] { ActiveInGameMenuVcType, InactiveInGameMenuVcType })
+        {
+            if (type == null)
+                continue;
+
+            foreach (var vc in MpUiReflection.FindAllInLoadedScenes(type, requireHierarchy: true))
+            {
+                var prompt = MpUiReflection.GetInstanceField(vc, "_disconnectPromptView");
+                if (!IsDisconnectPromptInstanceVisible(prompt))
+                    continue;
+
+                if (TryPressDisconnectPromptInstanceOk(prompt))
+                {
+                    MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Confirmed in-arena disconnect prompt (OK).");
+                    return true;
+                }
+
+                if (MpUiReflection.TryInvoke(vc, "HandleDisconnectPromptViewDidViewFinish", true))
+                {
+                    MultiplayerChat.Plugin.Log?.Info("[MPChat][QuickBinds] Confirmed in-arena disconnect prompt (finish handler).");
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryPressDisconnectPromptInstanceOk(object? promptView)
+    {
+        if (!IsDisconnectPromptInstanceVisible(promptView) || DisconnectPromptType == null)
             return false;
 
-        var promptField = DisconnectPromptType!.GetField("_promptGameObject", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (promptField?.GetValue(view) is GameObject prompt
-            && prompt != null
-            && !prompt.activeInHierarchy)
-            return false;
-
-        return TryPressFieldButton(view, DisconnectPromptType, "_okButton");
+        return TryPressFieldButton(promptView, DisconnectPromptType, "_okButton");
     }
 
     private static bool TryPressButtonByLabelNeedles(string[] needles)

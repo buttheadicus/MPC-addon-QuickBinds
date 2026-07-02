@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MultiplayerChat.Addon.QuickBinds")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f4b9b746e0e67660c78b94496e731d2349173b30")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1cf48ba9763cc8db93c8c45fd1a9c6a177c18ee0")]
 [assembly: System.Reflection.AssemblyProductAttribute("MultiplayerChat.Addon.QuickBinds")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MultiplayerChat.Addon.QuickBinds")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
